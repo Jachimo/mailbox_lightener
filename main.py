@@ -29,8 +29,8 @@ def lighten_message(msg: email.message, headers: list) -> email.message:
             if part.get_content_type().lower() == 'text/plain':
                 outmsg = MIMEText(_subtype='plain')
                 outmsg.set_payload(strip_quoteblocks(msg.get_payload()))
-                for hname, hval in headers:
-                    outmsg[hname] = hval  # copy headers from outermost message to output
+                for headertuple in headers:
+                    outmsg[headertuple[0]] = headertuple[1]  # copy headers from outermost message to output
                 return outmsg
 
 

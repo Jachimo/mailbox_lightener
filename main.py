@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import time
 import sys
 import os
 import mailbox
@@ -20,8 +21,14 @@ def main(infile, outfile):
         lightmessage = lighten_message(m, headers)
         if not lightmessage:
             logging.debug('No content in message after comment stripping.')
+            # TODO catch HTML-only messages and process them here
+            continue
+        if not lightmessage['Subject']:
+            # no subject line, which is bad
+            continue
         else:
             outbox.add(lightmessage)
+    logging.info(f'Wrote {len(outbox)} messages to {os.path.basename(outfile)}')
     outbox.flush()
     outbox.close()
     return 0
@@ -77,4 +84,7 @@ def is_quoted_line(lines: list, i: int) -> bool:
 
 if __name__ == '__main__':
     logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    start = time.process_time()  # For performance measurements
+    exitval = main(sys.argv[1], sys.argv[2])
+    logging.debug("Completed in " + str((time.process_time() - start)) + " seconds")
+    sys.exit(exitval)

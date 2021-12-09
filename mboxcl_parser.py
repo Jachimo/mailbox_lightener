@@ -24,7 +24,7 @@ def parse_from_filename(fname):
 
 
 def parse_from_file(infile):
-    logging.debug(f'Creating mmap from {infile.fileno()}')
+    logging.debug(f'Creating read-only mmap from {infile.fileno()}')
     mm = mmap.mmap(infile.fileno(), 0, access=mmap.ACCESS_READ)
     return parse_from_mmap(mm)
 
@@ -50,14 +50,14 @@ def parse_from_mmap(mm):
         if not contentsearch:  # when no more matches
             break
         logging.debug(f'Found {contentsearch.group(1)} at offset {contentsearch.start()}')
-        headerend = int(contentsearch.end()) + searchstart  # offset where the search string ends
-        contentlen = int(contentsearch.group(1))  # length of the alleged content payload in B (from headerend)
+        headerend = int(contentsearch.end()) + searchstart  # offset where search string ends (relative to searchstart!)
+        contentlen = int(contentsearch.group(1))  # length of the alleged content payload in bytes (from headerend)
         msg = mm[msgstart:headerend + contentlen]
         logging.debug('First 64B are: ' + str(msg[:64]))
         if msg[:5] == b'From ':
             logging.debug('Valid Content-Length detected, processing message.')
             messages.append(msg)
-            msgstart = headerend + contentlen + 1  # should be beginning of next "From " line
+            msgstart = headerend + contentlen + 1  # should be beginning of next "From " line (extra 1B is for \n)
             searchstart = msgstart
         else:
             logging.debug(f'Invalid Content-Length detected; restarting search at {headerend}')
@@ -66,11 +66,15 @@ def parse_from_mmap(mm):
             continue
     logging.info(f'Finished parsing {len(messages)} messages')
 
+    logging.debug('Converting bytestrings to mailbox.mboxMessage objects...')
     convertedmsgs = []
     for msg in messages:
-        # parse into email.email.EmailMessage messages
-        pass
-    return messages
+        bparser = email.parser.BytesParser()
+        emailmessage = bparser.parsebytes(msg)  # returns an email.message.Message object
+        mboxmessage = mailbox.mboxMessage(emailmessage)  # convert to a specialized mailbox.mbox message
+        convertedmsgs.append(mboxmessage)  # return list of messages (closest we can easily get to an actual mailbox)
+    logging.info(f'Finished converting {len(convertedmsgs)}, returning list')
+    return convertedmsgs
 
 
 def is_unix_from(bline):
@@ -84,4 +88,15 @@ def is_unix_from(bline):
 
 if __name__ == "__main__":
     logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
-    sys.exit(parse_from_filename(sys.argv[1]))
+    # for testing:
+    testoutput = parse_from_filename(sys.argv[1])
+    if not testoutput:
+        sys.exit(1)
+    for m in testoutput:
+        print(f'TYPE:  {type(m)}')
+        print(f'To:    {m["To"]}')
+        print(f'From:  {m["From"]}')
+        print(f'Date:  {m["Date"]}')
+        print(f'Subj.: {m["Subject"]}\n')
+    logging.info(f'{sys.argv[0]} completed with {len(testoutput)} messages output.')
+    sys.exit(0)

@@ -9,7 +9,7 @@ fromlineregex = re.compile("From .+\n")
 contentlengthregex = re.compile("Content-Length: .+\n")
 
 
-def mbox_type_detect(infile):
+def detect(infile):
     """Try to detect whether we have a mboxcl-style mailbox with Content-Length headers, or a classic mbox without"""
     logging.debug(f'Beginning mbox type detection on {infile}')
     with open(infile, 'r') as fo:
@@ -30,7 +30,7 @@ def mbox_type_detect(infile):
 
 if __name__ == "__main__":
     logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
-    result = mbox_type_detect(sys.argv[1])
+    result = detect(sys.argv[1])
     if not result:
         print('Indeterminate result.')
         sys.exit(1)

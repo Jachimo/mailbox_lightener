@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strip blockquoted lines out of an input string"""
+"""Clean up text emails by stripping block-quoted lines and other garbage"""
 
 import sys
 from typing import List
@@ -40,6 +40,7 @@ On Quartidi Ventôse, Ullamco Laboris wrote:
 
 
 def strip_quoteblocks(instr: str, blocksize: int) -> str:
+    """Strip blocks of more than blocksize (int) quoted lines together"""
     lines: List[str] = instr.splitlines()
     dellist: List[int] = []
     badcount: List[int] = []

@@ -12,6 +12,7 @@ from typing import Union
 
 import mboxcl_parser
 import mbox_type_detect
+import strip_quoteblocks
 
 
 def main(infile: str, outfile: str) -> int:
@@ -57,7 +58,11 @@ def lighten_message(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, 
             continue
         if part.get_content_type().lower() == 'text/plain':
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
-            newmsg = MIMEText(strip_3quoteblocks(part.get_payload(decode=True).decode('utf-8', errors='replace')))
+            newmsg = MIMEText(
+                strip_quoteblocks.strip_quoteblocks(
+                    part.get_payload(decode=True).decode('utf-8', errors='replace'),
+                    3)  # strip blocks of 3+ quoted lines
+            )
             return add_headers(newmsg, headers)
         else:
             logging.debug(f'Unhandled message part: {part.get_content_type().lower()}')
@@ -84,7 +89,7 @@ def html_to_text(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, boo
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
             htmlbody = part.get_payload(decode=True).decode('utf-8', errors='replace')
             textbody = strip_html(htmlbody)
-            newmsg = MIMEText(strip_3quoteblocks(textbody))
+            newmsg = MIMEText(strip_quoteblocks.strip_quoteblocks(textbody, 3))
             return add_headers(newmsg, headers)
     return False
 
@@ -101,38 +106,6 @@ def strip_html(htmlbody: str) -> str:
     body = re.sub(r"<[^>]*>", " ", body)  # and yes, an HTML parser would be the right way to do this...
     body = re.sub(r" {2,}", " ", body)  # condense spaces
     return body.strip()
-
-
-def strip_3quoteblocks(payload: str) -> str:
-    deletelines = []
-    lines = payload.splitlines()
-    logging.debug(f'Starting to strip quote blocks: original message contains {len(lines)} lines')
-    for i in range(len(lines)):
-        # look for series of 3 quoted lines together
-        if (  # there's probably a more-elegant general way to do this for blocks of N quoted lines...
-                (is_quoted_line(lines, i) and is_quoted_line(lines, i + 1) and is_quoted_line(lines, i + 2))
-                or (is_quoted_line(lines, i) and is_quoted_line(lines, i + 1) and is_quoted_line(lines, i - 1))
-                or (is_quoted_line(lines, i) and is_quoted_line(lines, i - 1) and is_quoted_line(lines, i - 2))
-        ):
-            deletelines.append(i)
-        if re.match("On .*wrote:", lines[i]):  # also not worth keeping
-            deletelines.append(i)
-    for linenumber in sorted(deletelines, reverse=True):  # reverse sort, so we don't change indices as we delete lines
-        del lines[linenumber]  # in-place modification
-    logging.debug(f'Finished stripping quote blocks: stripped message contains {len(lines)} lines')
-    joined = '\n'.join(lines)
-    return joined.strip()
-
-
-def is_quoted_line(lines: list, i: int) -> bool:
-    """Determine if a plaintext line is quoted text; not safe for HTML components."""
-    try:
-        if '>' in lines[i][:3]:  # might be more sophisticated ways of detecting quoting...
-            return True
-        else:
-            return False
-    except IndexError:
-        return False
 
 
 if __name__ == '__main__':

@@ -115,6 +115,8 @@ def strip_3quoteblocks(payload: str) -> str:
                 or (is_quoted_line(lines, i) and is_quoted_line(lines, i - 1) and is_quoted_line(lines, i - 2))
         ):
             deletelines.append(i)
+        if re.match("On .*wrote:", lines[i]):  # also not worth keeping
+            deletelines.append(i)
     for linenumber in sorted(deletelines, reverse=True):  # reverse sort, so we don't change indices as we delete lines
         del lines[linenumber]  # in-place modification
     logging.debug(f'Finished stripping quote blocks: stripped message contains {len(lines)} lines')
@@ -126,8 +128,6 @@ def is_quoted_line(lines: list, i: int) -> bool:
     """Determine if a plaintext line is quoted text; not safe for HTML components."""
     try:
         if '>' in lines[i][:3]:  # might be more sophisticated ways of detecting quoting...
-            return True
-        if re.match("On .*wrote:", lines[i]):  # also not worth keeping
             return True
         else:
             return False

@@ -61,6 +61,27 @@ def strip_quoteblocks(instr: str, blocksize: int) -> str:
     return joined.strip()
 
 
+def strip_trailing_quoteblocks(instr: str, blocksize: int) -> str:
+    """Strip blocks of more than blocksize quoted lines together, but only if they are at the end of the file"""
+    lines: List[str] = instr.strip().splitlines()
+    dellist: List[int] = []
+    badcount: List[int] = []
+    i = 0
+    for i in range(len(lines)):
+        result = is_quoted_line(lines[i])
+        if not result:
+            badcount = []
+        if result:
+            badcount.append(i)
+        i += 1
+    if len(badcount) >= blocksize:  # Only strip quote blocks that occur at EOF
+        dellist.extend(badcount)
+    for j in sorted(dellist, reverse=True):
+        del lines[j]
+    joined = '\n'.join(lines)
+    return joined.strip()
+
+
 def is_quoted_line(line: str) -> bool:
     """Determine if a plaintext line is quoted text; not safe for HTML components."""
     if '>' in line[:3] and '<' not in line[:3]:

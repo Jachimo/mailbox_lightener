@@ -12,7 +12,7 @@ from typing import Union
 
 import mboxcl_parser
 import mbox_type_detect
-import strip_quoteblocks
+import email_textutils
 
 
 def main(infile: str, outfile: str) -> int:
@@ -59,7 +59,7 @@ def lighten_message(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, 
         if part.get_content_type().lower() == 'text/plain':
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
             newmsg = MIMEText(
-                strip_quoteblocks.strip_quoteblocks(
+                email_textutils.strip_quoteblocks(
                     part.get_payload(decode=True).decode('utf-8', errors='replace'),
                     3)  # strip blocks of 3+ quoted lines
             )
@@ -89,7 +89,7 @@ def html_to_text(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, boo
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
             htmlbody = part.get_payload(decode=True).decode('utf-8', errors='replace')
             textbody = strip_html(htmlbody)
-            newmsg = MIMEText(strip_quoteblocks.strip_quoteblocks(textbody, 3))
+            newmsg = MIMEText(email_textutils.strip_quoteblocks(textbody, 3))
             return add_headers(newmsg, headers)
     return False
 

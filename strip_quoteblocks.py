@@ -2,8 +2,8 @@
 """Strip blockquoted lines out of an input string"""
 
 import sys
-import os
 from typing import List
+import re
 
 testdata = """LOREM IPSUM
 
@@ -32,7 +32,7 @@ deserunt mollit anim id est laborum.
   <> Occaecat
 * Ad minim veniam
 
-Ullamco Laboris
+On Quartidi Ventôse, Ullamco Laboris wrote:
 > Voluptate Velit
 > Ullamco Laboris
 > Irure Dolor
@@ -69,6 +69,20 @@ def is_quoted_line(line: str) -> bool:
         return False
 
 
+def strip_quoteheader(instr: str) -> str:
+    lines: List[str] = instr.splitlines()
+    dellist: List[int] = []
+    i = 0
+    for i in range(len(lines)):
+        if re.match("On .*wrote:", lines[i]):
+            dellist.append(i)
+        i += 1
+    for j in sorted(dellist, reverse=True):
+        del lines[j]
+    joined = '\n'.join(lines)
+    return joined.strip()
+
+
 if __name__ == "__main__":
-    print(strip_quoteblocks(testdata, 2))
+    print(strip_quoteheader(strip_quoteblocks(testdata, 3)))
     sys.exit()

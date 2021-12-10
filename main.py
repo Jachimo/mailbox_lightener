@@ -21,8 +21,8 @@ def main() -> int:
     parser.add_argument('infile', help='Input mbox file to read from')
     parser.add_argument('outfile', help='Output mbox file to write to (will append if exists)')
     parser.add_argument('--type', '-t', help='Manually specify input mbox type (mbox, mboxcl)')
-    parser.add_argument('--quoteblock', '-q', type=int, default=3,
-                        help="Strip blocks of this many quoted lines found together (default 3)")
+    parser.add_argument('--quoteblock', '-q', type=int, default=3, metavar='N',
+                        help="Strip blocks of N+ quoted lines found together (default 3)")
     parser.add_argument('--debug', help='Enable debug mode (very verbose output)', action='store_true')
     args = parser.parse_args()
 

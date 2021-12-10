@@ -4,8 +4,6 @@
 # Dovecot mbox implementation docs: https://doc.dovecot.org/admin_manual/mailbox_formats/mbox/#mbox-mbox-format
 #  and https://opensource.apple.com/source/dovecot/dovecot-279/dovecot/doc/wiki/MailboxFormat.mbox.txt.auto.html
 
-from typing import TextIO
-from typing import BinaryIO
 import os
 import sys
 import mmap

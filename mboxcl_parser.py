@@ -71,7 +71,7 @@ def parse_from_mmap(mm):
         emailmessage = bparser.parsebytes(msg)  # returns an email.message.Message object
         mboxmessage = mailbox.mboxMessage(emailmessage)  # convert to a specialized mailbox.mbox message
         convertedmsgs.append(mboxmessage)  # return list of messages (closest we can easily get to an actual mailbox)
-    logging.info(f'Finished converting {len(convertedmsgs)} messages, returning list')
+    logging.info(f'Found {len(convertedmsgs)} messages, returning list')
     return convertedmsgs
 
 

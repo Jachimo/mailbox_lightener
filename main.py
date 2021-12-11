@@ -3,6 +3,7 @@
 
 import time
 import sys
+import argparse
 import os
 import mailbox
 from email.mime.text import MIMEText
@@ -12,14 +13,37 @@ from typing import Union
 
 import mboxcl_parser
 import mbox_type_detect
+import email_textutils
 
 
-def main(infile: str, outfile: str) -> int:
+def main() -> int:
+    parser = argparse.ArgumentParser(description='"Lighten" a mbox file by stripping out non-text parts"')
+    parser.add_argument('infile', help='Input mbox file to read from')
+    parser.add_argument('outfile', help='Output mbox file to write to (will append if exists)')
+    parser.add_argument('--type', '-t', help='Manually specify input mbox type (mbox, mboxcl)')
+    parser.add_argument('--quoteblock', '-q', type=int, default=3, metavar='N',
+                        help="Strip blocks of N+ quoted lines found together (default 3)")
+    parser.add_argument('--debug', help='Enable debug mode (very verbose output)', action='store_true')
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
+        logging.debug('Debug output enabled')
+    else:
+        logging.basicConfig(encoding='utf-8', level=logging.INFO)
+
+    infile = args.infile
+    outfile = args.outfile
     logging.info(f'Attempting to "lighten" {infile} --> {outfile}')
-    type = mbox_type_detect.detect(infile)
+
+    if args.type:
+        type = args.type
+    else:
+        type = mbox_type_detect.detect(infile)
     if not type:
-        logging.error('Could not determine mbox flavor.')
+        logging.error('Could not determine mbox flavor. Try specifying manually with --type')
         return 1
+
     if type == 'mbox':
         mbox = mailbox.mbox(infile)
     if type == 'mboxcl':
@@ -27,26 +51,27 @@ def main(infile: str, outfile: str) -> int:
     logging.info(f'Mailbox {os.path.basename(infile)} opened. Contains {len(mbox)} messages.')
     outbox = mailbox.mbox(outfile)
     logging.debug(f'{outfile} opened for writing.')
+
     for m in mbox:
         headers = []
         for h in m.items():
             headers.append(h)  # appends a (key, value) tuple for each header
-        lightmessage = lighten_message(m, headers)
+        lightmessage = lighten_message(m, headers, args.quoteblock)
         if not lightmessage:
             logging.debug('No content in message after comment stripping.')
-            lightmessage = html_to_text(m, headers)
+            lightmessage = html_to_text(m, headers, args.quoteblock)
         if not lightmessage:
             logging.info(f'Skipped message without text or HTML payload: {m["Message-ID"]}')
             continue
         else:
             outbox.add(lightmessage)
-    logging.info(f'Wrote {len(outbox)} messages to {os.path.basename(outfile)}')
+    logging.info(f'Output mailbox {os.path.basename(outfile)} now contains {len(outbox)} messages')
     outbox.flush()
     outbox.close()
     return 0
 
 
-def lighten_message(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, bool]:
+def lighten_message(msg: mailbox.mboxMessage, headers: list, blocksize: int) -> Union[MIMEText, bool]:
     logging.debug(f'Processing message {msg["Message-ID"]} {msg["Content-Type"].split(";")[0]}')
     for part in msg.walk():
         if part.get_content_disposition() is not None:  # skip attachments
@@ -57,7 +82,11 @@ def lighten_message(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, 
             continue
         if part.get_content_type().lower() == 'text/plain':
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
-            newmsg = MIMEText(strip_3quoteblocks(part.get_payload(decode=True).decode('utf-8', errors='replace')))
+            newmsg = MIMEText(
+                email_textutils.strip_quoteblocks(
+                    part.get_payload(decode=True).decode('utf-8', errors='replace'),
+                    blocksize)
+            )
             return add_headers(newmsg, headers)
         else:
             logging.debug(f'Unhandled message part: {part.get_content_type().lower()}')
@@ -75,7 +104,7 @@ def add_headers(msg: MIMEText, headers: list) -> MIMEText:
     return msg
 
 
-def html_to_text(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, bool]:
+def html_to_text(msg: mailbox.mboxMessage, headers: list, blocksize: int) -> Union[MIMEText, bool]:
     logging.debug(f'Looking for HTML in {msg["Message-ID"]} {msg["Content-Type"].split(";")[0]}')
     for part in msg.walk():
         ctype = part.get_content_type().lower()
@@ -84,7 +113,7 @@ def html_to_text(msg: mailbox.mboxMessage, headers: list) -> Union[MIMEText, boo
             logging.debug(f'Found {msg["Content-Type"].split(";")[0]}')
             htmlbody = part.get_payload(decode=True).decode('utf-8', errors='replace')
             textbody = strip_html(htmlbody)
-            newmsg = MIMEText(strip_3quoteblocks(textbody))
+            newmsg = MIMEText(email_textutils.strip_quoteblocks(textbody, blocksize))
             return add_headers(newmsg, headers)
     return False
 
@@ -103,41 +132,8 @@ def strip_html(htmlbody: str) -> str:
     return body.strip()
 
 
-def strip_3quoteblocks(payload: str) -> str:
-    deletelines = []
-    lines = payload.splitlines()
-    logging.debug(f'Starting to strip quote blocks: original message contains {len(lines)} lines')
-    for i in range(len(lines)):
-        # look for series of 3 quoted lines together
-        if (  # there's probably a more-elegant general way to do this for blocks of N quoted lines...
-                (is_quoted_line(lines, i) and is_quoted_line(lines, i + 1) and is_quoted_line(lines, i + 2))
-                or (is_quoted_line(lines, i) and is_quoted_line(lines, i + 1) and is_quoted_line(lines, i - 1))
-                or (is_quoted_line(lines, i) and is_quoted_line(lines, i - 1) and is_quoted_line(lines, i - 2))
-        ):
-            deletelines.append(i)
-        if re.match("On .*wrote:", lines[i]):  # also not worth keeping
-            deletelines.append(i)
-    for linenumber in sorted(deletelines, reverse=True):  # reverse sort, so we don't change indices as we delete lines
-        del lines[linenumber]  # in-place modification
-    logging.debug(f'Finished stripping quote blocks: stripped message contains {len(lines)} lines')
-    joined = '\n'.join(lines)
-    return joined.strip()
-
-
-def is_quoted_line(lines: list, i: int) -> bool:
-    """Determine if a plaintext line is quoted text; not safe for HTML components."""
-    try:
-        if '>' in lines[i][:3]:  # might be more sophisticated ways of detecting quoting...
-            return True
-        else:
-            return False
-    except IndexError:
-        return False
-
-
 if __name__ == '__main__':
-    logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
     start = time.process_time()  # For performance measurements
-    exitval = main(sys.argv[1], sys.argv[2])
-    logging.debug(f'{os.path.basename(sys.argv[0])} completed in {str((time.process_time() - start))} seconds')
+    exitval = main()
+    print(f'{os.path.basename(sys.argv[0])} completed in {str((time.process_time() - start))} seconds')
     sys.exit(exitval)
